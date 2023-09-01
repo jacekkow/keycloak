@@ -162,6 +162,51 @@ public class RealmTest extends AbstractAdminTest {
         assertEquals("/realms/new/account/*", accountConsoleClient.getRedirectUris().get(0));
     }
 
+
+    @Test
+    public void renameRealmUrls() {
+        String oldRealm = "old-urls";
+        String newRealm = "new-urls";
+
+        getCleanup()
+            .addCleanup(() -> adminClient.realms().realm(oldRealm).remove())
+            .addCleanup(() -> adminClient.realms().realm(newRealm).remove());
+
+        RealmRepresentation rep = new RealmRepresentation();
+        rep.setId(oldRealm);
+        rep.setRealm(oldRealm);
+
+        adminClient.realms().create(rep);
+
+        Map<String, String> newBaseUrls = new HashMap<>();
+        Map<String, List<String>> newRedirectUris = new HashMap<>();
+
+        adminClient.realm(oldRealm).clients().findAll().forEach(client -> {
+            if (client.getBaseUrl() != null && client.getBaseUrl().contains("/" + oldRealm + "/")) {
+                newBaseUrls.put(client.getClientId(), client.getBaseUrl().replace("/" + oldRealm + "/", "/" + newRealm + "/"));
+            }
+            if (client.getRedirectUris() != null) {
+                newRedirectUris.put(
+                    client.getClientId(),
+                    client.getRedirectUris()
+                            .stream()
+                            .map(redirectUri -> redirectUri.replace("/" + oldRealm + "/", "/" + newRealm + "/"))
+                            .collect(Collectors.toList())
+                );
+            }
+        });
+
+        rep.setRealm(newRealm);
+        adminClient.realm(oldRealm).update(rep);
+
+        newBaseUrls.forEach((clientId, baseUrl) -> {
+            assertEquals(baseUrl, adminClient.realm(newRealm).clients().findByClientId(clientId).get(0).getBaseUrl());
+        });
+        newRedirectUris.forEach((clientId, redirectUris) -> {
+            assertEquals(redirectUris, adminClient.realm(newRealm).clients().findByClientId(clientId).get(0).getRedirectUris());
+        });
+    }
+
     @Test
     public void createRealmEmpty() {
         getCleanup()
